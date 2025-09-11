@@ -1,21 +1,7 @@
+// src/manager/SourcePanel.jsx
 import React from "react";
-import * as ReactWindow from "react-window";
 import { loadOrg, moveMember, addMember } from "@/shared/orgStore.js";
 import { historyCapture } from "@/shared/history.js";
-
-const RWList = ReactWindow && typeof ReactWindow.FixedSizeList === "function"
-  ? ReactWindow.FixedSizeList : null;
-
-function FallbackList({ height, width, itemCount, itemSize, children }) {
-  return (
-    <div style={{ height, width, overflowY: "auto" }}>
-      {Array.from({ length: itemCount }).map((_, index) =>
-        children({ index, style: { height: itemSize, display: "flex", alignItems: "center" } })
-      )}
-    </div>
-  );
-}
-const VirtualList = RWList || FallbackList;
 
 const ranges = [
   { id: "AF", label: "A–F", test: (c) => c >= "A" && c <= "F" },
@@ -70,25 +56,6 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
     onMoved?.();
   }
 
-  const Row = ({ index, style }) => {
-    const m = filtered[index];
-    const checked = selected.has(m.id);
-    return (
-      <div style={style} className="px-2">
-        <label className="member">
-          <input
-            type="checkbox" className="h-4 w-4" checked={checked}
-            onChange={() => setSelected(prev => { const n=new Set(prev); n.has(m.id)?n.delete(m.id):n.add(m.id); return n; })}
-          />
-          <div className="min-w-0">
-            <div className="name truncate-2" title={m.name}>{m.name}</div>
-            <div className="meta">{m.role || "Altro"}</div>
-          </div>
-        </label>
-      </div>
-    );
-  };
-
   return (
     <div className="card h-full">
       <div className="flex items-center gap-2 mb-3">
@@ -107,7 +74,7 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
           if (!name) return;
           historyCapture();
           addMember({ name });
-        }}>+ Operaio</button> 
+        }}>+ Operaio</button>
       </div>
 
       <div className="flex items-center justify-between mb-2 text-sm">
@@ -118,10 +85,25 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
         </div>
       </div>
 
-      <div className="border rounded-xl overflow-hidden" style={{ height: 420 }}>
-        <VirtualList height={420} width={"100%"} itemCount={filtered.length} itemSize={56}>
-          {Row}
-        </VirtualList>
+      {/* Liste simple scrollable (pas de dépendance) */}
+      <div className="border rounded-xl overflow-hidden" style={{ height: 420, overflowY: "auto" }}>
+        {filtered.map((m) => {
+          const checked = selected.has(m.id);
+          return (
+            <div key={m.id} className="px-2 py-1">
+              <label className="member">
+                <input
+                  type="checkbox" className="h-4 w-4" checked={checked}
+                  onChange={() => setSelected(prev => { const n=new Set(prev); n.has(m.id)?n.delete(m.id):n.add(m.id); return n; })}
+                />
+                <div className="min-w-0">
+                  <div className="name truncate-2" title={m.name}>{m.name}</div>
+                  <div className="meta">{m.role || "Altro"}</div>
+                </div>
+              </label>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-3 flex items-center gap-2">
