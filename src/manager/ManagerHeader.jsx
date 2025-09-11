@@ -12,7 +12,6 @@ export default function ManagerHeader({
   onExportCSV,
   onExportJSON,
 }) {
-  // ✅ Béton : si org est undefined, on prend un objet vide valide
   const o = org && typeof org === "object"
     ? org
     : { members: [], teams: [], unassigned: [], suspects: [] };
@@ -53,7 +52,8 @@ export default function ManagerHeader({
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="btn">📥 Importa nomi
+          <label className="btn">
+            📥 Importa nomi
             <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportChange} disabled={busy}/>
           </label>
           <button className="btn" onClick={onUndo} disabled={!historyCanUndo()}>↶ Annulla</button>
