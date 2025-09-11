@@ -6,14 +6,14 @@ import TeamBoard from "@/manager/TeamBoard.jsx";
 import {
   loadOrg, saveOrg,
   ensureMember, ensureTeamByCapoName, moveMember,
-  addCapo, removeTeam,
+  addCapo,
 } from "@/shared/orgStore.js";
 import {
   historyCapture, historyUndo, historyRedo,
   historyCanUndo, historyCanRedo
 } from "@/shared/history.js";
 
-/* --- utils parse fichiers --- */
+/* utils parse */
 const norm = (s) => String(s ?? "").trim();
 const toTitle = (name) =>
   norm(name).toLowerCase().replace(/\b([a-zà-ÿ])/g, (m) => m.toUpperCase());
@@ -22,22 +22,18 @@ const HEADERS = {
   capo: [/^capo\b/i, /chef/i, /responsab/i, /leader/i],
   member: [/^memb/i, /operaio/i, /dipenden/i, /operatore/i, /member/i, /worker/i, /persona/i, /nome/i],
   role: [/^ruolo/i, /role/i],
-  team: [/^team/i, /^squadra/i],
 };
-
 function detectColumn(headers) {
-  const res = { capo: -1, member: -1, role: -1, team: -1 };
+  const res = { capo: -1, member: -1, role: -1 };
   headers.forEach((h, i) => {
     const v = norm(h);
     if (!v) return;
     if (res.capo < 0 && HEADERS.capo.some(rx => rx.test(v))) res.capo = i;
     if (res.member < 0 && HEADERS.member.some(rx => rx.test(v))) res.member = i;
     if (res.role < 0 && HEADERS.role.some(rx => rx.test(v))) res.role = i;
-    if (res.team < 0 && HEADERS.team.some(rx => rx.test(v))) res.team = i;
   });
   return res;
 }
-
 async function parseAny(file) {
   if (/\.(xlsx|xls)$/i.test(file.name)) {
     const XLSX = await import("xlsx");
@@ -61,9 +57,8 @@ async function parseAny(file) {
     return text.split(/\r?\n/).map(l => l.split(sep).map(c => norm(c.replace(/^"|"$/g, ""))));
   }
 }
-
 function smartAnalyze(grid) {
-  // trouver la première ligne plausible de headers (<= 3 premières lignes)
+  if (!grid.length) return { rows: [], singles: [] };
   let headerRow = 0;
   let map = detectColumn(grid[0] || []);
   for (let i = 1; i < Math.min(3, grid.length); i++) {
@@ -86,7 +81,6 @@ function smartAnalyze(grid) {
       role: role || "",
     });
   }
-  // si aucune colonne détectée, fallback = simple colonne de noms (toutes cellules)
   if (!out.length) {
     const names = new Set();
     grid.forEach(r => r.forEach(c => { const v = norm(c); if (v) names.add(toTitle(v)); }));
@@ -95,14 +89,13 @@ function smartAnalyze(grid) {
   return { rows: out, singles: [] };
 }
 
-/* --- Page --- */
+/* page */
 export default function Manager(){
   const [org, setOrg] = React.useState(loadOrg());
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
   const [selected, setSelected] = React.useState(new Set());
 
-  // sync de base locale
   React.useEffect(()=>{
     const t = setInterval(()=> setOrg(loadOrg()), 400);
     return ()=> clearInterval(t);
@@ -119,7 +112,6 @@ export default function Manager(){
       historyCapture();
 
       if (rows && rows.length) {
-        // format Capo/Membro
         const created = { capi: 0, membri: 0, assegnati: 0 };
         const seenCapo = new Set();
         for (const r of rows) {
@@ -133,14 +125,12 @@ export default function Manager(){
               created.assegnati++;
             }
           } else if (r.member) {
-            const m = ensureMember(r.member, r.role || "Altro");
-            // laisser en sorgente
+            ensureMember(r.member, r.role || "Altro");
             created.membri++;
           }
         }
         setMsg(`Import ok. Capi nuovi: ${created.capi} · Membri: ${created.membri} · Assegnati: ${created.assegnati}`);
       } else if (singles && singles.length) {
-        // simple liste → ajoute en sorgente
         let c = 0;
         singles.forEach(n => { ensureMember(n); c++; });
         setMsg(`Import ok. Aggiunti ${c} nomi in Sorgente.`);
@@ -199,7 +189,6 @@ export default function Manager(){
         }}
       />
 
-      {/* actions globales simples */}
       <div className="card flex items-center gap-2">
         <button className="btn" onClick={()=>{
           const name = prompt("Nuovo Capo (nome)?");
