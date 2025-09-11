@@ -1,55 +1,39 @@
-// src/shared/history.js
 import { loadOrg, saveOrg } from "@/shared/orgStore.js";
 
-const HK = "core_org_hist_v1";
-const CLAMP = 50;
-
+const K = "core_history";
 function read() {
-  try {
-    return JSON.parse(localStorage.getItem(HK)) || { past: [], future: [] };
-  } catch {
-    return { past: [], future: [] };
-  }
+  try { return JSON.parse(sessionStorage.getItem(K)) || { undo: [], redo: [] }; }
+  catch { return { undo: [], redo: [] }; }
 }
-function write(h) {
-  localStorage.setItem(HK, JSON.stringify(h));
-}
-
-export function historyInit() {
-  if (!localStorage.getItem(HK)) write({ past: [], future: [] });
-}
+function write(s) { sessionStorage.setItem(K, JSON.stringify(s)); }
 
 export function historyCapture() {
-  const h = read();
-  const snap = JSON.stringify(loadOrg());
-  h.past.push(snap);
-  if (h.past.length > CLAMP) h.past = h.past.slice(-CLAMP);
-  h.future = []; // couper redo
-  write(h);
+  const s = read();
+  const snap = loadOrg();
+  s.undo.push(snap); // limite optionnelle
+  if (s.undo.length > 50) s.undo.shift();
+  s.redo = [];
+  write(s);
 }
-
 export function historyUndo() {
-  const h = read();
-  if (!h.past.length) return false;
-  const current = JSON.stringify(loadOrg());
-  const prev = h.past.pop();
-  h.future.push(current);
-  write(h);
-  saveOrg(JSON.parse(prev));
+  const s = read();
+  if (!s.undo.length) return false;
+  const prev = s.undo.pop();
+  const curr = loadOrg();
+  s.redo.push(curr);
+  saveOrg(prev);
+  write(s);
   return true;
 }
-
 export function historyRedo() {
-  const h = read();
-  if (!h.future.length) return false;
-  const current = JSON.stringify(loadOrg());
-  const next = h.future.pop();
-  h.past.push(current);
-  write(h);
-  saveOrg(JSON.parse(next));
+  const s = read();
+  if (!s.redo.length) return false;
+  const next = s.redo.pop();
+  const curr = loadOrg();
+  s.undo.push(curr);
+  saveOrg(next);
+  write(s);
   return true;
 }
-
-export const historyCanUndo = () => read().past.length > 0;
-export const historyCanRedo = () => read().future.length > 0;
-export function historyReset() { write({ past: [], future: [] }); }
+export const historyCanUndo = () => read().undo.length > 0;
+export const historyCanRedo = () => read().redo.length > 0;
