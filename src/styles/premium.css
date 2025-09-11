@@ -1,0 +1,43 @@
+/* --- Colonnes Capo modernes --- */
+.columns{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.card.column{
+  display:flex; flex-direction:column;
+  /* hauteur fluide avec header sticky */
+  min-height: 260px;
+  max-height: calc(100vh - 240px);
+}
+.card .col-head{
+  position: sticky; top: 0; z-index: 2;
+  margin: -16px -16px 10px;
+  padding: 12px 16px 10px;
+  background: linear-gradient(180deg, rgba(13,21,38,0.75), rgba(13,21,38,0.55));
+  border-bottom: 1px solid var(--line-2);
+  backdrop-filter: saturate(120%) blur(8px);
+}
+.card .col-body{
+  overflow: auto;
+  padding-right: 4px;
+  padding-bottom: 8px;
+}
+
+/* boutons icône compacts */
+.btn.icon{
+  width: 28px; height: 28px; padding: 0;
+  display: inline-grid; place-items: center;
+  border-radius: 10px;
+}
+
+/* titres/chips ne se marchent plus dessus */
+.col-title{
+  display:flex; align-items:center; gap: 8px; flex-wrap: wrap;
+}
+.col-meta{ display:flex; align-items:center; gap: 8px; flex-wrap: wrap; }
+
+/* cartes membres plus denses, actions à droite */
+.member{ gap:10px; }
+.member .name{ font-weight:600; }
+.member .row-actions .btn.icon{ border-color: var(--line-2); }
