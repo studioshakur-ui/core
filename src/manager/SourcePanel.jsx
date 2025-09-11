@@ -107,7 +107,7 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
           if (!name) return;
           historyCapture();
           addMember({ name });
-        }}>+ Operaio</button>
+        }}>+ Operaio</button> 
       </div>
 
       <div className="flex items-center justify-between mb-2 text-sm">
