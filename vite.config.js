@@ -1,7 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
-
+optimizeDeps: {
+  exclude: ["exceljs", "@dnd-kit/core", "@dnd-kit/accessibility", "@dnd-kit/utilities"]
+}
 export default defineConfig({
   plugins: [react()],
   resolve: {
