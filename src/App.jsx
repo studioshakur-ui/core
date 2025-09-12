@@ -8,7 +8,7 @@ import Catalogo from "@/pages/Catalog.jsx";
 import Login from "@/pages/Login.jsx";
 import Manager from "@/manager/Manager.jsx";
 
-import { SessionProvider } from "@/shared/session.js";
+import { SessionProvider } from "@/shared/session.jsx";
 import { RequireAuth, RequireRole } from "@/components/RequireAuth.jsx";
 
 export default function App() {
