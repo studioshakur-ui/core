@@ -9,7 +9,6 @@ import {
 } from "@dnd-kit/core";
 import { historyCapture } from "@/shared/history.js";
 
-/* store hook */
 function useOrg() {
   const [org, setOrg] = React.useState(() => loadOrg() || { members: [], teams: [], unassigned: [], suspects: [] });
   React.useEffect(() => { saveOrg(org); }, [org]);
@@ -18,7 +17,6 @@ function useOrg() {
   return { org, reload, getMember };
 }
 
-/* DnD helpers */
 function DroppableColumn({ id, children, className }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
@@ -41,7 +39,6 @@ function DraggableMember({ id, children, selected }) {
   );
 }
 
-/* UI */
 function TeamColumn({
   team, org, selected, setSelected,
   onSetCapo, onAddMember, onDeleteTeam,
