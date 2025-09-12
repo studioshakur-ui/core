@@ -1,3 +1,4 @@
+// src/manager/TeamBoard.jsx
 import React from "react";
 import {
   loadOrg, saveOrg, addMember, addTeam, editTeam,
@@ -8,6 +9,7 @@ import {
   DragOverlay, closestCorners, useDroppable, useDraggable,
 } from "@dnd-kit/core";
 import { historyCapture } from "@/shared/history.js";
+import { rememberRecentTeam } from "@/shared/assist.js"; // <-- IMPORT AU TOP
 
 function useOrg() {
   const [org, setOrg] = React.useState(() => loadOrg() || { members: [], teams: [], unassigned: [], suspects: [] });
@@ -16,6 +18,8 @@ function useOrg() {
   const getMember = (id) => (org?.members || []).find((m) => m.id === id);
   return { org, reload, getMember };
 }
+
+function useDnDIds(id) { return { dragId: `member:${id}`, dropId: `team:${id}` }; }
 
 function DroppableColumn({ id, children, className }) {
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -158,23 +162,23 @@ export default function TeamBoard({ selected, setSelected }) {
   const [orderBy, setOrderBy] = React.useState("capoAZ");
 
   function handleDragStart(event) { setActiveId(event.active?.id || null); }
-  import { rememberRecentTeam } from "@/shared/assist.js";
-function handleDragEnd(event) {
-  const active = event.active, over = event.over; setActiveId(null);
-  if (!active || !over) return;
-  const memberId = String(active.id || "").replace("member:", "");
-  const overId = String(over.id || "");
-  if (!memberId) return;
-  historyCapture();
-  if (overId === "unassigned") { moveMember(memberId, null); reload(); return; }
-  if (overId.startsWith("team:")) {
-    const teamId = overId.slice(5);
-    moveMember(memberId, teamId);
-    rememberRecentTeam(teamId); // <-- mémorise pour les suggestions
-    reload();
-    return;
+
+  function handleDragEnd(event) {
+    const active = event.active, over = event.over; setActiveId(null);
+    if (!active || !over) return;
+    const memberId = String(active.id || "").replace("member:", "");
+    const overId = String(over.id || "");
+    if (!memberId) return;
+    historyCapture();
+    if (overId === "unassigned") { moveMember(memberId, null); reload(); return; }
+    if (overId.startsWith("team:")) {
+      const teamId = overId.slice(5);
+      moveMember(memberId, teamId);
+      rememberRecentTeam(teamId); // <-- mémorise pour les suggestions
+      reload();
+      return;
+    }
   }
-}
   function handleDragCancel() { setActiveId(null); }
 
   const activeMember = activeId && String(activeId).startsWith("member:")
