@@ -12,7 +12,7 @@ import { historyCapture } from "@/shared/history.js";
 import { rememberRecentTeam } from "@/shared/assist.js";
 import RecipesMenu from "@/manager/RecipesMenu.jsx";
 import TeamHealthRing from "@/manager/TeamHealthRing.jsx";
-
+import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 function useOrg() {
   const [org, setOrg] = React.useState(() => loadOrg() || { members: [], teams: [], unassigned: [], suspects: [] });
   React.useEffect(() => { saveOrg(org); }, [org]);
