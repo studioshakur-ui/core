@@ -16,7 +16,9 @@
     "exceljs": "^4.4.0",
     "@dnd-kit/core": "6.3.1",
 "@dnd-kit/accessibility": "3.1.1",
-"@dnd-kit/utilities": "3.2.2"
+"@dnd-kit/utilities": "3.2.2",
+    "jspdf": "2.5.2",
+"jspdf-autotable": "3.8.4"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
