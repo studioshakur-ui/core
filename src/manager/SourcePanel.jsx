@@ -13,27 +13,34 @@ const ranges = [
 ];
 
 export default function SourcePanel({ selected, setSelected, onMoved }) {
+  // Etat “source de vérité”
   const [org, setOrg] = React.useState(() => loadOrg() || {members:[],teams:[],unassigned:[],suspects:[]});
-  const [q, setQ] = React.useState("");
-  const [tab, setTab] = React.useState("AF");
+
+  // Etat de filtre “en préparation” (UI) — ne s’applique PAS tant qu’on ne clique pas “Filtrer”
+  const [pending, setPending] = React.useState({ tab: "AF", q: "" });
+
+  // Etat de filtre “appliqué” (figé jusqu’à ce que le manager reclique)
+  const [applied, setApplied] = React.useState({ tab: "AF", q: "" });
+
   const [drawer, setDrawer] = React.useState(false);
 
+  // Rafraîchit l’org toutes les 400 ms (légère poll locale)
   React.useEffect(() => {
     const i = setInterval(() => setOrg(loadOrg() || {members:[],teams:[],unassigned:[],suspects:[]}), 400);
     return () => clearInterval(i);
   }, []);
 
   const o = org && typeof org === "object" ? org : {members:[],teams:[],unassigned:[],suspects:[]};
-
   const allUnassigned = (o.unassigned || [])
     .map((id) => (o.members || []).find((m) => m.id === id))
     .filter(Boolean);
 
+  // Applique UNIQUEMENT l’état “applied”
   const filtered = allUnassigned.filter((m) => {
     const name = (m.name || "").trim();
     const first = name.charAt(0).toUpperCase();
-    const inRange = (ranges.find((r) => r.id === tab)?.test(first)) || false;
-    const match = name.toLowerCase().includes(q.toLowerCase());
+    const inRange = (ranges.find((r) => r.id === applied.tab)?.test(first)) || false;
+    const match = name.toLowerCase().includes((applied.q || "").toLowerCase());
     return inRange && match;
   });
 
@@ -48,6 +55,15 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
     });
   }
 
+  function applyFilters() {
+    setApplied({ ...pending });
+  }
+
+  function resetFilters() {
+    setPending({ tab: "AF", q: "" });
+    setApplied({ tab: "AF", q: "" });
+  }
+
   function assignTo(teamId) {
     const ids = filtered.map(m=>m.id).filter(id => selected.has(id));
     if (!ids.length) return;
@@ -59,7 +75,7 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
     setDrawer(false);
   }
 
-  // SUGGESTIONS : top3 (récents + moins chargé)
+  // SUGGESTIONS
   const suggestions = rankTeams(o).slice(0, 5);
   const leastId = leastLoadedTeamId(o);
   const chips = [];
@@ -74,18 +90,33 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
 
   return (
     <div className="card h-full relative">
-      {/* Filtres */}
-      <div className="flex items-center gap-2 mb-2">
-        {ranges.map((r) => (
-          <button
-            key={r.id}
-            className={`tab ${tab === r.id ? "active" : ""}`}
-            onClick={() => setTab(r.id)}
-          >
-            {r.label}
-          </button>
-        ))}
-        <input className="input flex-1" placeholder="Cerca…" value={q} onChange={(e)=>setQ(e.target.value)}/>
+      {/* Barre de filtres (MANUEL) */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        {/* Tabs (état pending uniquement) */}
+        <div className="flex gap-1">
+          {ranges.map((r) => (
+            <button
+              key={r.id}
+              className={`tab ${pending.tab === r.id ? "active" : ""}`}
+              onClick={() => setPending(p => ({ ...p, tab: r.id }))}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        <input
+          className="input flex-1 min-w-[180px]"
+          placeholder="Cerca…"
+          value={pending.q}
+          onChange={(e)=>setPending(p => ({ ...p, q: e.target.value }))}
+        />
+
+        {/* Actions de filtre */}
+        <button className="btn primary" onClick={applyFilters}>Filtrer</button>
+        <button className="btn ghost" onClick={resetFilters}>Réinitialiser</button>
+
+        {/* Ajout rapide */}
         <button className="btn" onClick={()=>{
           const name = prompt("Aggiungi Operaio (nome)?");
           if (!name) return;
@@ -94,11 +125,12 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
         }}>+ Operaio</button>
       </div>
 
-      {/* BARRE CONTEXTUELLE */}
+      {/* Bandeau contextuel quand sélection */}
       {selectedCount > 0 && (
         <div className="selbar">
           <div className="selbar-left">
             <span className="badge badge--muted">{selectedCount} selezionati</span>
+            <span className="chip">Filtro: {applied.label || ranges.find(r=>r.id===applied.tab)?.label} · “{applied.q || "—"}”</span>
           </div>
           <div className="selbar-actions">
             {chips.map(c => (
@@ -108,7 +140,7 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
               </button>
             ))}
             <button className="btn" onClick={() => setDrawer(true)}>Più…</button>
-            <button className="btn ghost" onClick={() => assignTo(null)} title="Invia in Sorgente">↩ Sorgente</button>
+            <button className="btn ghost" onClick={() => assignTo(null)}>↩ Sorgente</button>
             <button className="btn ghost" onClick={clearSelection}>Deseleziona</button>
           </div>
         </div>
@@ -123,7 +155,11 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
               <label className="member">
                 <input
                   type="checkbox" className="h-4 w-4" checked={checked}
-                  onChange={() => setSelected(prev => { const n=new Set(prev); n.has(m.id)?n.delete(m.id):n.add(m.id); return n; })}
+                  onChange={() => setSelected(prev => {
+                    const n=new Set(prev);
+                    n.has(m.id)?n.delete(m.id):n.add(m.id);
+                    return n;
+                  })}
                 />
                 <div className="min-w-0">
                   <div className="name truncate-2" title={m.name}>{m.name}</div>
@@ -136,22 +172,12 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
 
         {showEmptyHint && (
           <div className="p-4 text-sm text-secondary">
-            Nessun nome in questo filtro…
-            <div className="mt-2 flex gap-2">
-              <button className="btn" onClick={() => {
-                const name = prompt("Aggiungi Operaio (nome)?");
-                if (!name) return;
-                historyCapture(); addMember({ name });
-              }}>+ Operaio</button>
-              <button className="btn ghost" onClick={() => document.querySelector('input[type="file"]')?.click()}>
-                Importa file
-              </button>
-            </div>
+            Nessun nome con il filtro attuale. Modifica i criteri e premi <b>Filtrer</b>.
           </div>
         )}
       </div>
 
-      {/* Tiroir */}
+      {/* Tiroir affectation */}
       <SmartAssignDrawer
         open={drawer}
         onClose={() => setDrawer(false)}
