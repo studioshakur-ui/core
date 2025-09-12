@@ -1,6 +1,6 @@
 import React from "react";
 import { supabase } from "@/lib/supabase.js";
-import { useSession } from "@/shared/session.js";
+import { useSession } from "@/shared/session.jsx";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
