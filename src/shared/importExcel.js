@@ -4,7 +4,8 @@
 //  - flat (CSV/XLSX sans styles)  => { capi[], operai[] } basés sur entêtes ("capo/ruolo") ou tout en operai
 
 import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
+ // Utilise la build navigateur (UMD) pour éviter les polyfills Node sur Netlify
+import ExcelJS from "exceljs/dist/exceljs.min.js";
 
 // ---------- Utils ----------
 function clean(s) {
