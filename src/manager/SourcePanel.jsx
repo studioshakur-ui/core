@@ -1,3 +1,4 @@
+// src/manager/SourcePanel.jsx
 import React from "react";
 import { loadOrg, moveMember, addMember } from "@/shared/orgStore.js";
 import { historyCapture } from "@/shared/history.js";
@@ -37,6 +38,7 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
   });
 
   const selectedCount = filtered.reduce((n, m) => n + (selected.has(m.id) ? 1 : 0), 0);
+  const showEmptyHint = filtered.length === 0;
 
   function clearSelection() {
     setSelected(prev => {
@@ -57,7 +59,7 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
     setDrawer(false);
   }
 
-  // SUGGESTIONS : top3 = récents/moins chargé
+  // SUGGESTIONS : top3 (récents + moins chargé)
   const suggestions = rankTeams(o).slice(0, 5);
   const leastId = leastLoadedTeamId(o);
   const chips = [];
@@ -112,7 +114,7 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
         </div>
       )}
 
-      {/* Liste simple scrollable */}
+      {/* Liste */}
       <div className="border rounded-xl overflow-hidden" style={{ height: 420, overflowY: "auto" }}>
         {filtered.map((m) => {
           const checked = selected.has(m.id);
@@ -131,8 +133,21 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
             </div>
           );
         })}
-        {!filtered.length && (
-          <div className="p-3 text-sm text-secondary">Nessun nome in questo filtro…</div>
+
+        {showEmptyHint && (
+          <div className="p-4 text-sm text-secondary">
+            Nessun nome in questo filtro…
+            <div className="mt-2 flex gap-2">
+              <button className="btn" onClick={() => {
+                const name = prompt("Aggiungi Operaio (nome)?");
+                if (!name) return;
+                historyCapture(); addMember({ name });
+              }}>+ Operaio</button>
+              <button className="btn ghost" onClick={() => document.querySelector('input[type="file"]')?.click()}>
+                Importa file
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
