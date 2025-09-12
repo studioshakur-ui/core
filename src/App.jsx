@@ -1,43 +1,34 @@
 import React from "react";
-import { NavLink, Routes, Route, Navigate } from "react-router-dom";
-import Manager from "@/pages/Manager.jsx";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import AppShell from "@/layouts/AppShell.jsx";
 
-const Nav = () => (
-  <div className="appbar">
-    <div className="appbar-left">
-      <span className="brand">CORE</span>
-      <NavLink to="/dashboard" className="pill">Dashboard</NavLink>
-      <NavLink to="/capo" className="pill">Capo</NavLink>
-      <NavLink to="/manager" className="pill">Manager</NavLink>
-      <NavLink to="/catalogo" className="pill">Catalogo</NavLink>
-      <NavLink to="/login" className="pill">Login</NavLink>
-    </div>
-    <div className="appbar-right">
-      <span className="userpill">manager · manager</span>
-      <button className="pill">Esci</button>
-    </div>
-  </div>
-);
+import Dashboard from "@/pages/Dashboard.jsx";
+import Capo from "@/pages/Capo.jsx";
+import Catalogo from "@/pages/Catalog.jsx";
+import Login from "@/pages/Login.jsx";
+import Manager from "@/manager/Manager.jsx";
 
-const Placeholder = ({ title }) => (
-  <div className="container"><div className="card"><h2>{title}</h2></div></div>
-);
+import { SessionProvider } from "@/shared/session.js";
+import { RequireAuth, RequireRole } from "@/components/RequireAuth.jsx";
 
 export default function App() {
   return (
-    <>
-      <Nav />
-      <div className="container">
-        <Routes>
-          <Route path="/" element={<Navigate to="/manager" replace />} />
-          <Route path="/manager" element={<Manager />} />
-          <Route path="/dashboard" element={<Placeholder title="Dashboard (placeholder)" />} />
-          <Route path="/capo" element={<Placeholder title="Capo (placeholder)" />} />
-          <Route path="/catalogo" element={<Placeholder title="Catalogo (placeholder)" />} />
-          <Route path="/login" element={<Placeholder title="Login (placeholder)" />} />
-          <Route path="*" element={<Placeholder title="404" />} />
-        </Routes>
-      </div>
-    </>
+    <BrowserRouter>
+      <SessionProvider>
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/login" element={<Login />} />
+
+            <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+            <Route path="/capo" element={<RequireRole role="capo"><Capo /></RequireRole>} />
+            <Route path="/manager" element={<RequireRole role="manager"><Manager /></RequireRole>} />
+
+            <Route path="/catalogo" element={<RequireAuth><Catalogo /></RequireAuth>} />
+            <Route path="*" element={<div style={{padding:24}}>404</div>} />
+          </Routes>
+        </AppShell>
+      </SessionProvider>
+    </BrowserRouter>
   );
 }
