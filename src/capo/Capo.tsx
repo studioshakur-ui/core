@@ -1,6 +1,7 @@
 import React from "react";
 import { useSession } from "@/shared/session.jsx";
 import { loadOrg } from "@/shared/orgStore.js";
+import { loadCatalog } from "@/shared/catalogStore.js";
 
 // Utilitaires
 function todayKey() {
@@ -15,31 +16,35 @@ function lsKey(teamId, dateKey) {
 }
 function sanitizeReport(members) {
   const map = {};
-  (members||[]).forEach(m => { map[m.id] = { hours: "", note: "" }; });
+  (members||[]).forEach(m => {
+    map[m.id] = { hours: "", note: "", taskId: "" };
+  });
   return map;
 }
 
 export default function Capo() {
   const { user, role, loading } = useSession();
   const [org, setOrg] = React.useState(() => loadOrg() || {members:[],teams:[],unassigned:[]});
+  const [catalog, setCatalog] = React.useState(() => loadCatalog() || []);
   const [teamId, setTeamId] = React.useState(null);
   const [dateKey, setDateKey] = React.useState(todayKey());
-  const [report, setReport] = React.useState({}); // {memberId: {hours,note}}
+  const [report, setReport] = React.useState({}); // {memberId: {hours,note,taskId}}
 
-  // rafraîchit org toutes les 2s (localStorage)
+  // rafraîchit org & catalog (localStorage) périodiquement
   React.useEffect(() => {
-    const i = setInterval(() => setOrg(loadOrg() || {members:[],teams:[],unassigned:[]}), 2000);
+    const i = setInterval(() => {
+      setOrg(loadOrg() || {members:[],teams:[],unassigned:[]});
+      setCatalog(loadCatalog() || []);
+    }, 2000);
     return () => clearInterval(i);
   }, []);
 
   const teams = org.teams || [];
   const members = org.members || [];
 
-  // essaie de trouver l'équipe du capo automatiquement (par email ~ nom)
+  // essaie de trouver l'équipe du capo automatiquement
   React.useEffect(() => {
     if (!user || !members.length || !teams.length) return;
-    // 1) match par email exact dans un champ user_metadata.name? (si inexistant, fallback)
-    // 2) fallback : on prend la première équipe dont le capo a un email identique à user.email
     const byId = new Map(members.map(m => [m.id, m]));
     let found = null;
     for (const t of teams) {
@@ -49,7 +54,6 @@ export default function Capo() {
       if (guessEmail && user.email && guessEmail === user.email.toLowerCase()) {
         found = t.id; break;
       }
-      // heuristique douce: si le nom du capo est contenu dans l'email utilisateur
       if (user.email && capo.name) {
         const normName = capo.name.toLowerCase().replace(/\s+/g,".");
         if (user.email.toLowerCase().includes(normName)) {
@@ -68,13 +72,12 @@ export default function Capo() {
     if (raw) {
       try { setReport(JSON.parse(raw)); } catch { setReport({}); }
     } else {
-      // init vierge basé sur les membres de l’équipe
       const t = (teams||[]).find(x => x.id === teamId);
       const tMembers = (t?.members||[]).map(id => members.find(m => m.id===id)).filter(Boolean);
       setReport(sanitizeReport(tMembers));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, dateKey, org]); // si org change (ajout/suppression), on regénère
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId, dateKey, org]);
 
   React.useEffect(() => {
     if (!teamId || !dateKey) return;
@@ -86,6 +89,10 @@ export default function Capo() {
   const team = (teams||[]).find(t => t.id === teamId) || null;
   const capo = team ? byId.get(team.capo) : null;
   const teamMembers = team ? (team.members||[]).map(id => byId.get(id)).filter(Boolean) : [];
+
+  function taskName(taskId) {
+    return catalog.find(t => t.id === taskId)?.name || "";
+  }
 
   async function exportPDF() {
     if (!team) { alert("Nessuna squadra selezionata."); return; }
@@ -105,11 +112,11 @@ export default function Capo() {
       if (capo?.name) doc.text(`Capo: ${capo.name}`, left+200, y);
       y += 24;
 
-      // Tableau
-      const head = [["Operaio", "Ore", "Note"]];
+      // Tableau avec colonne Attività
+      const head = [["Operaio", "Attività", "Ore", "Note"]];
       const body = teamMembers.map((m) => {
         const r = report?.[m.id] || {};
-        return [m.name || "", r.hours || "", r.note || ""];
+        return [m.name || "", taskName(r.taskId) || "", r.hours || "", r.note || ""];
       });
 
       doc.autoTable({
@@ -119,13 +126,13 @@ export default function Capo() {
         styles: { fontSize: 9, cellPadding: 6, overflow: "linebreak" },
         headStyles: { fillColor: [20, 25, 35], textColor: 255 },
         columnStyles: {
-          0: { cellWidth: 220 },
-          1: { cellWidth: 60, halign: "center" },
-          2: { cellWidth: 240 }
+          0: { cellWidth: 180 }, // Operaio
+          1: { cellWidth: 180 }, // Attività
+          2: { cellWidth: 50, halign: "center" }, // Ore
+          3: { cellWidth: 160 }  // Note
         }
       });
 
-      // Pied
       const endY = doc.lastAutoTable.finalY + 30;
       doc.setFontSize(9);
       doc.text("Firma Capo: _______________________", left, endY);
@@ -188,13 +195,29 @@ export default function Capo() {
 
           <div className="grid gap-2">
             {teamMembers.map((m) => {
-              const r = report?.[m.id] || { hours: "", note: "" };
+              const r = report?.[m.id] || { hours: "", note: "", taskId: "" };
               return (
-                <div key={m.id} className="member">
+                <div key={m.id} className="member items-start">
                   <div className="min-w-0 flex-1">
                     <div className="name truncate-2">{m.name}</div>
                     <div className="meta">{m.role || "Operaio"}</div>
                   </div>
+
+                  {/* Sélecteur d'activité depuis le Catalog */}
+                  <select
+                    className="input w-52"
+                    value={r.taskId || ""}
+                    onChange={(e)=>{
+                      const v = e.target.value;
+                      setReport(prev => ({ ...prev, [m.id]: { ...(prev[m.id]||{}), taskId: v } }));
+                    }}
+                  >
+                    <option value="">— Attività —</option>
+                    {catalog.map(task => (
+                      <option key={task.id} value={task.id}>{task.name}</option>
+                    ))}
+                  </select>
+
                   <input
                     className="input w-24"
                     type="number" min="0" max="24" step="0.5"
@@ -206,7 +229,7 @@ export default function Capo() {
                     }}
                   />
                   <input
-                    className="input w-[320px] max-w-[50vw]"
+                    className="input w-[320px] max-w-[45vw]"
                     type="text"
                     placeholder="Note (facoltative)"
                     value={r.note}
@@ -219,6 +242,12 @@ export default function Capo() {
               );
             })}
           </div>
+
+          {catalog.length === 0 && (
+            <div className="mt-3 text-xs text-amber-500">
+              Nessuna attività nel Catalogo. Vai a <a className="underline" href="/catalogo">Catalogo</a> per aggiungere attività.
+            </div>
+          )}
         </div>
       )}
     </div>
