@@ -1,4 +1,4 @@
-// src/shared/session.js
+// src/shared/session.jsx
 import React from "react";
 import { supabase } from "@/lib/supabase.js";
 
@@ -9,7 +9,6 @@ export function SessionProvider({ children }) {
 
   async function refreshProfile(user) {
     if (!user) { setState({ user: null, role: null, loading: false }); return; }
-    // Tente de lire le profil (table 'profiles')
     const { data, error } = await supabase
       .from("profiles")
       .select("role")
@@ -20,11 +19,9 @@ export function SessionProvider({ children }) {
   }
 
   React.useEffect(() => {
-    // session initiale
     supabase.auth.getSession().then(({ data }) => {
       refreshProfile(data.session?.user || null);
     });
-    // écoute login/logout/refresh
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       refreshProfile(session?.user || null);
     });
