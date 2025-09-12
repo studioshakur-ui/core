@@ -1,12 +1,21 @@
-// Lecture XLSX/CSV + détection "capo par ligne verte" (ExcelJS).
+// Lecture XLSX (avec styles) + CSV.
+// Deux modes :
+//  - blocks (XLSX avec fond vert) => groupes { capo, members[] } (jusqu'à la prochaine ligne verte / ligne vide)
+//  - flat (CSV/XLSX sans styles)  => { capi[], operai[] } basés sur entêtes ("capo/ruolo") ou tout en operai
+
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 
-// ---------- utils ----------
-function clean(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
+// ---------- Utils ----------
+function clean(s) {
+  return String(s || "").replace(/\s+/g, " ").trim();
+}
 function isNameish(s) {
   s = clean(s);
-  return /^[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-Ý'à-öø-ÿ.\- ]{1,}$/.test(s);
+  // Doit contenir au moins une minuscule (évite "POD DX", "STESURA FIBRE")
+  if (!/[a-zà-öø-ý]/.test(s)) return false;
+  // Commence par majuscule, autorise accents, apostrophes, tirets
+  return /^[A-ZÀ-ÖØ-Ý][a-zà-öø-ý'.\- ]{1,}$/.test(s);
 }
 function toFullName(first, last, raw) {
   const f = clean(first), l = clean(last), r = clean(raw);
@@ -25,6 +34,7 @@ function hexToRgb(hex) {
   const b = parseInt(v.slice(4, 6), 16);
   return { r, g, b };
 }
+// "Vert" tolérant
 function isGreenish(argbOrHex) {
   if (!argbOrHex) return false;
   const hex = String(argbOrHex).startsWith("#")
@@ -33,22 +43,10 @@ function isGreenish(argbOrHex) {
   const rgb = hexToRgb(hex);
   if (!rgb) return false;
   const { r, g, b } = rgb;
-  // vert visible (tolérant) : g fort, r/b plus faibles
   return g > 140 && g > r + 25 && g > b + 25;
 }
 
-function firstTextCells(row) {
-  // Renvoie les 3 premières cellules "texte"
-  const arr = [];
-  row.eachCell((cell) => {
-    const v = cell.value;
-    const s = typeof v === "string" ? v : v?.text || "";
-    const t = clean(s);
-    if (t) arr.push(t);
-  });
-  return arr.slice(0, 3);
-}
-
+// ---------- CSV / XLSX sans styles (mode flat) ----------
 function guessHeaderIndexes(rows) {
   if (!rows.length) return { firstIdx: 0, lastIdx: 1, rawIdx: null, roleIdx: null };
   const header = rows[0].map((x) => clean(x).toLowerCase());
@@ -59,130 +57,126 @@ function guessHeaderIndexes(rows) {
   const roleIdx  = findIdx(["ruolo", "role", "capo"]);
   return {
     firstIdx: firstIdx >= 0 ? firstIdx : 0,
-    lastIdx : lastIdx  >= 0 ? lastIdx  : 1,
-    rawIdx  : rawIdx   >= 0 ? rawIdx   : null,
-    roleIdx : roleIdx  >= 0 ? roleIdx  : null,
+    lastIdx:  lastIdx  >= 0 ? lastIdx  : 1,
+    rawIdx:   rawIdx   >= 0 ? rawIdx   : null,
+    roleIdx:  roleIdx  >= 0 ? roleIdx  : null,
   };
 }
 
-// ---------- parse CSV / xlsx sans styles ----------
-function parseWithXLSX(buf) {
-  const wb = XLSX.read(buf, { type: "array" });
-  const names = new Map();
-  const capi = [], operai = [];
+function parseWithXLSX(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: "array" });
+  const names = new Map(); // name -> role
+  const op = [];
+  const cp = [];
   wb.SheetNames.forEach((sn) => {
     const ws = wb.Sheets[sn];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-    if (!rows?.length) return;
+    if (!rows || !rows.length) return;
     const { firstIdx, lastIdx, rawIdx, roleIdx } = guessHeaderIndexes(rows);
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i] || [];
       const full = toFullName(row[firstIdx], row[lastIdx], rawIdx != null ? row[rawIdx] : "");
       const name = clean(full);
-      if (!isNameish(name)) continue;
+      if (!name || !isNameish(name)) continue;
       let isCapo = false;
       if (roleIdx != null) {
-        const roleText = clean(row[roleIdx]).toLowerCase();
-        if (roleText.includes("capo")) isCapo = true;
+        const role = clean(row[roleIdx]).toLowerCase();
+        if (role.includes("capo")) isCapo = true;
       }
       if (!names.has(name)) {
-        names.set(name, true);
-        (isCapo ? capi : operai).push(name);
+        names.set(name, isCapo ? "capo" : "operaio");
+        (isCapo ? cp : op).push(name);
       }
     }
   });
-  return { capi, operai };
+  return { mode: "flat", capi: cp, operai: op };
 }
 
-// ---------- parse XLSX avec styles : blocs capo -> membri ----------
-async function parseBlocksExcelJS(file, sheetNamePrefs = ["PROGRAMMA"]) {
+// ---------- XLSX avec styles (mode blocks par lignes vertes) ----------
+async function parseBlocksWithExcelJS(file) {
   const buf = await file.arrayBuffer();
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
 
-  // Choix de la feuille: d'abord par nom préféré, sinon la plus "dense"
-  let sheet = null;
-  for (const pref of sheetNamePrefs) {
-    sheet = wb.getWorksheet(pref);
-    if (sheet) break;
-  }
-  if (!sheet) {
-    sheet = wb.worksheets.slice().sort((a, b) => (b.actualRowCount || 0) - (a.actualRowCount || 0))[0] || wb.worksheets[0];
-  }
-  if (!sheet) return { blocks: [] };
+  const groups = [];
+  const singles = [];
 
-  const blocks = []; // [{capo:"", members:["","",..."]}]
-  let current = null;
+  wb.eachSheet((ws) => {
+    let current = null; // { capo, members[] }
 
-  sheet.eachRow((row) => {
-    // détecte si la ligne est "verte"
-    let green = false;
-    row.eachCell((cell) => {
-      const fill = cell.fill;
-      if (fill && fill.type === "pattern" && fill.fgColor?.argb) {
-        if (isGreenish(fill.fgColor.argb)) green = true;
+    ws.eachRow((row) => {
+      // Extraire le "nom plausible" : 1ers champs texte de la ligne
+      const cells = row.values
+        .filter((v) => v && typeof v !== "number")
+        .map((v) => (typeof v === "string" ? v : v.text || ""));
+      const first = cells[1] ?? cells[0] ?? "";
+      const second = cells[2] ?? "";
+      const raw = cells[0] ?? "";
+      const candidate = toFullName(first, second, raw);
+      const name = clean(candidate);
+
+      // Lignes vides -> on coupe le groupe
+      if (!name) { current = null; return; }
+
+      // Cette ligne est-elle verte ?
+      let green = false;
+      row.eachCell((cell) => {
+        const fill = cell.fill;
+        if (fill && fill.type === "pattern" && fill.fgColor && fill.fgColor.argb) {
+          if (isGreenish(fill.fgColor.argb)) green = true;
+        }
+      });
+
+      // Si nom non humain, on ignore (ex: "POD DX")
+      if (!isNameish(name)) { current = green ? null : current; return; }
+
+      if (green) {
+        // Nouveau capo -> nouveau groupe
+        current = { capo: name, members: [] };
+        groups.push(current);
+      } else {
+        // Operaio : si un capo courant existe, on l'associe; sinon, single
+        if (current) {
+          if (!current.members.includes(name) && name.toLowerCase() !== current.capo.toLowerCase()) {
+            current.members.push(name);
+          }
+        } else {
+          if (!singles.includes(name)) singles.push(name);
+        }
       }
     });
-
-    const texts = firstTextCells(row);
-    // on prend le nom dans la première colonne texte (typiquement col A)
-    const name = clean(
-      toFullName(texts[0] || "", texts[1] || "", texts[0] || "")
-    );
-    if (!isNameish(name)) return; // saute lignes vides / entêtes / tâches
-
-    if (green) {
-      // nouvelle équipe
-      current = { capo: name, members: [] };
-      blocks.push(current);
-    } else {
-      // membre du dernier capo rencontré
-      if (!current) {
-        // si aucun capo vu encore, on ignore (ou on pourrait empiler en noCapo)
-        return;
-      }
-      if (!current.members.includes(name) && name !== current.capo) {
-        current.members.push(name);
-      }
-    }
   });
 
-  return { blocks };
+  return { mode: "blocks", groups, singles };
 }
 
-// ---------- API publiques ----------
-
-// 1) Import simple (capo vs operai)
-export async function importRoster(file) {
-  const lower = file?.name?.toLowerCase() || "";
-  const isXlsx = lower.endsWith(".xlsx") || lower.endsWith(".xlsm") || lower.endsWith(".xlsb");
+// ---------- API publique ----------
+export async function importRosterBlocks(file) {
+  // Mode groupé par lignes vertes (XLSX). Renvoie { mode:"blocks", groups:[{capo,members[]}], singles:[] }
   try {
-    if (isXlsx) {
-      // essaye ExcelJS pour couleurs; si rien -> fallback "simple"
-      const { blocks } = await parseBlocksExcelJS(file);
-      if (blocks?.length) {
-        // déduire listes depuis les blocs
-        const capi = blocks.map(b => b.capo);
-        const operai = [...new Set(blocks.flatMap(b => b.members))];
-        return { capi, operai, blocks };
-      }
-    }
-    const buf = await file.arrayBuffer();
-    const { capi, operai } = parseWithXLSX(buf);
-    return { capi, operai, blocks: [] };
+    return await parseBlocksWithExcelJS(file);
   } catch (e) {
-    console.error("Import error:", e);
-    return { capi: [], operai: [], blocks: [] };
+    console.warn("ExcelJS blocks failed, falling back to flat:", e);
+    const buf = await file.arrayBuffer();
+    return parseWithXLSX(buf);
   }
 }
 
-// 2) Import structuré par équipes (nécessite XLSX avec couleur verte)
-export async function importRosterWithTeams(file) {
+export async function importRoster(file) {
+  // Mode simple (capi/operai) pour CSV/XLSX sans styles
   try {
-    const { blocks } = await parseBlocksExcelJS(file);
-    return { blocks };
+    const name = (file?.name || "").toLowerCase();
+    const buf = await file.arrayBuffer();
+    // Si c'est du CSV, pas de styles -> flat
+    if (name.endsWith(".csv")) return parseWithXLSX(buf);
+    // Sinon tente ExcelJS pour styles; s'il ne trouve pas de groupes => flat
+    try {
+      const blocks = await parseBlocksWithExcelJS(file);
+      if (blocks.mode === "blocks" && blocks.groups.length) return blocks;
+    } catch { /* ignore */ }
+    return parseWithXLSX(buf);
   } catch (e) {
-    console.error("Team import error:", e);
-    return { blocks: [] };
+    console.error("Import error:", e);
+    return { mode: "flat", capi: [], operai: [] };
   }
 }
