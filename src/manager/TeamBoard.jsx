@@ -9,7 +9,9 @@ import {
   DragOverlay, closestCorners, useDroppable, useDraggable,
 } from "@dnd-kit/core";
 import { historyCapture } from "@/shared/history.js";
-import { rememberRecentTeam } from "@/shared/assist.js"; // <-- IMPORT AU TOP
+import { rememberRecentTeam } from "@/shared/assist.js";
+import RecipesMenu from "@/manager/RecipesMenu.jsx";
+import TeamHealthRing from "@/manager/TeamHealthRing.jsx";
 
 function useOrg() {
   const [org, setOrg] = React.useState(() => loadOrg() || { members: [], teams: [], unassigned: [], suspects: [] });
@@ -19,8 +21,6 @@ function useOrg() {
   return { org, reload, getMember };
 }
 
-function useDnDIds(id) { return { dragId: `member:${id}`, dropId: `team:${id}` }; }
-
 function DroppableColumn({ id, children, className }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
@@ -29,6 +29,7 @@ function DroppableColumn({ id, children, className }) {
     </div>
   );
 }
+
 function DraggableMember({ id, children, selected }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: `member:${id}` });
@@ -108,6 +109,14 @@ function TeamColumn({
           </div>
 
           <div className="flex items-center gap-2">
+            <TeamHealthRing
+              team={team}
+              org={org}
+              onSuggest={() => {
+                // Pas d’action automatique : simple info pour l’instant
+                alert("Suggerimento filtro: Non assegnati (nessuna azione automatica).");
+              }}
+            />
             <button className="btn icon" title="Aggiungi membro" onClick={onAddMember}>＋</button>
             <button className="btn icon" title="Elimina colonna" onClick={onDeleteTeam}>✖</button>
           </div>
@@ -174,7 +183,7 @@ export default function TeamBoard({ selected, setSelected }) {
     if (overId.startsWith("team:")) {
       const teamId = overId.slice(5);
       moveMember(memberId, teamId);
-      rememberRecentTeam(teamId); // <-- mémorise pour les suggestions
+      rememberRecentTeam(teamId);
       reload();
       return;
     }
@@ -220,6 +229,9 @@ export default function TeamBoard({ selected, setSelected }) {
       <div className="card">
         <div className="flex items-center gap-2">
           <button className="btn primary" onClick={createTeamWithCapo}>+ Nuovo Capo</button>
+
+          <RecipesMenu /> {/* menu des recettes */}
+
           <div className="ml-auto flex items-center gap-2">
             <label className="text-sm text-secondary">Ordina colonne:</label>
             <select className="input" value={orderBy} onChange={e => setOrderBy(e.target.value)}>
