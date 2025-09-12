@@ -1,6 +1,6 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import { useSession } from "@/shared/session.js";
+import { useSession } from "@/shared/session.jsx";
 
 export function RequireAuth({ children }) {
   const { user, loading } = useSession();
