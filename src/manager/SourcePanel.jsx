@@ -1,4 +1,3 @@
-// src/manager/SourcePanel.jsx
 import React from "react";
 import { loadOrg, moveMember, addMember } from "@/shared/orgStore.js";
 import { historyCapture } from "@/shared/history.js";
@@ -85,7 +84,6 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
         </div>
       </div>
 
-      {/* Liste simple scrollable (pas de dépendance) */}
       <div className="border rounded-xl overflow-hidden" style={{ height: 420, overflowY: "auto" }}>
         {filtered.map((m) => {
           const checked = selected.has(m.id);
