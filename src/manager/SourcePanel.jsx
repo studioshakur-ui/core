@@ -1,6 +1,8 @@
 import React from "react";
 import { loadOrg, moveMember, addMember } from "@/shared/orgStore.js";
 import { historyCapture } from "@/shared/history.js";
+import SmartAssignDrawer from "@/manager/SmartAssignDrawer.jsx";
+import { rankTeams, rememberRecentTeam, leastLoadedTeamId } from "@/shared/assist.js";
 
 const ranges = [
   { id: "AF", label: "A–F", test: (c) => c >= "A" && c <= "F" },
@@ -13,6 +15,7 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
   const [org, setOrg] = React.useState(() => loadOrg() || {members:[],teams:[],unassigned:[],suspects:[]});
   const [q, setQ] = React.useState("");
   const [tab, setTab] = React.useState("AF");
+  const [drawer, setDrawer] = React.useState(false);
 
   React.useEffect(() => {
     const i = setInterval(() => setOrg(loadOrg() || {members:[],teams:[],unassigned:[],suspects:[]}), 400);
@@ -33,31 +36,44 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
     return inRange && match;
   });
 
-  const teams = (o.teams || []).map(t => {
-    const capo = (o.members || []).find(m => m.id === t.capo);
-    const sizeNoCapo = (t.members || []).filter(id => id !== t.capo).length;
-    return { ...t, capoName: capo ? capo.name : "", sizeNoCapo };
-  }).filter(t => !!t.capo);
+  const selectedCount = filtered.reduce((n, m) => n + (selected.has(m.id) ? 1 : 0), 0);
 
-  function toggleAll(val) {
+  function clearSelection() {
     setSelected(prev => {
       const n = new Set(prev);
-      filtered.forEach(m => (val ? n.add(m.id) : n.delete(m.id)));
+      filtered.forEach(m => n.delete(m.id));
       return n;
     });
   }
+
   function assignTo(teamId) {
     const ids = filtered.map(m=>m.id).filter(id => selected.has(id));
-    if (!ids.length || !teamId) return;
+    if (!ids.length) return;
     historyCapture();
-    ids.forEach(id => moveMember(id, teamId));
+    ids.forEach(id => moveMember(id, teamId || null));
+    if (teamId) rememberRecentTeam(teamId);
     setSelected(prev => { const n=new Set(prev); ids.forEach(id=>n.delete(id)); return n; });
     onMoved?.();
+    setDrawer(false);
+  }
+
+  // SUGGESTIONS : top3 = récents/moins chargé
+  const suggestions = rankTeams(o).slice(0, 5);
+  const leastId = leastLoadedTeamId(o);
+  const chips = [];
+  for (const s of suggestions) {
+    if (chips.length >= 3) break;
+    if (!chips.find(c => c.id === s.id)) chips.push(s);
+  }
+  if (leastId && !chips.find(c => c.id === leastId)) {
+    const leastMeta = suggestions.find(s => s.id === leastId);
+    if (leastMeta) chips[ chips.length < 3 ? chips.length : 2 ] = leastMeta;
   }
 
   return (
-    <div className="card h-full">
-      <div className="flex items-center gap-2 mb-3">
+    <div className="card h-full relative">
+      {/* Filtres */}
+      <div className="flex items-center gap-2 mb-2">
         {ranges.map((r) => (
           <button
             key={r.id}
@@ -76,14 +92,27 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
         }}>+ Operaio</button>
       </div>
 
-      <div className="flex items-center justify-between mb-2 text-sm">
-        <div>Filtrati: <b>{filtered.length}</b> · Selezionati: <b>{filtered.filter((m)=>selected.has(m.id)).length}</b></div>
-        <div className="flex items-center gap-2">
-          <button className="btn" onClick={()=>toggleAll(true)}>Seleziona tutti</button>
-          <button className="btn" onClick={()=>toggleAll(false)}>Deseleziona</button>
+      {/* BARRE CONTEXTUELLE */}
+      {selectedCount > 0 && (
+        <div className="selbar">
+          <div className="selbar-left">
+            <span className="badge badge--muted">{selectedCount} selezionati</span>
+          </div>
+          <div className="selbar-actions">
+            {chips.map(c => (
+              <button key={c.id} className="chip" onClick={() => assignTo(c.id)}>
+                Capo · {c.capoName || "mancante"}
+                <span className="chip-count">{c.sizeNoCapo}</span>
+              </button>
+            ))}
+            <button className="btn" onClick={() => setDrawer(true)}>Più…</button>
+            <button className="btn ghost" onClick={() => assignTo(null)} title="Invia in Sorgente">↩ Sorgente</button>
+            <button className="btn ghost" onClick={clearSelection}>Deseleziona</button>
+          </div>
         </div>
-      </div>
+      )}
 
+      {/* Liste simple scrollable */}
       <div className="border rounded-xl overflow-hidden" style={{ height: 420, overflowY: "auto" }}>
         {filtered.map((m) => {
           const checked = selected.has(m.id);
@@ -102,19 +131,18 @@ export default function SourcePanel({ selected, setSelected, onMoved }) {
             </div>
           );
         })}
+        {!filtered.length && (
+          <div className="p-3 text-sm text-secondary">Nessun nome in questo filtro…</div>
+        )}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
-        <select className="input flex-1" id="source-assign-team">
-          <option value="">Assegna a Capo…</option>
-          {teams.map(t => (
-            <option key={t.id} value={t.id}>Capo {t.capoName} ({t.sizeNoCapo} membri)</option>
-          ))}
-        </select>
-        <button className="btn" onClick={() => assignTo(document.getElementById("source-assign-team").value || "")}>
-          Applica
-        </button>
-      </div>
+      {/* Tiroir */}
+      <SmartAssignDrawer
+        open={drawer}
+        onClose={() => setDrawer(false)}
+        org={o}
+        onAssign={(teamId) => assignTo(teamId)}
+      />
     </div>
   );
 }
