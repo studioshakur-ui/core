@@ -17,10 +17,8 @@ export default function ManagerHeader({
     : { members: [], teams: [], unassigned: [], suspects: [] };
 
   const total = o.members?.length || 0;
-  const unassigned = o.unassigned?.length || 0;
+  const inSource = o.unassigned?.length || 0;
   const teams = o.teams || [];
-  const capi = teams.length;
-
   const sizes = teams.map(t => (t.members || []).filter(id => id !== t.capo).length);
   const minSize = sizes.length ? Math.min(...sizes) : 0;
   const maxSize = sizes.length ? Math.max(...sizes) : 0;
@@ -34,35 +32,43 @@ export default function ManagerHeader({
   });
   const dupCount = Array.from(dupMap.values()).filter(n => n > 1).length;
 
+  const kpis = [
+    { label: "Membri", val: total },
+    { label: "In sorgente", val: inSource },
+    { label: "Capi mancanti", val: missingCapo, tone: missingCapo ? "warn" : "" },
+    { label: "Mediana membri/capo", val: medSize },
+    { label: "Min–Max", val: sizes.length ? `${minSize}–${maxSize}` : 0 },
+    { label: "Duplicati", val: dupCount, tone: dupCount ? "danger" : "" },
+  ].filter(k => k.val && k.val !== 0 && k.val !== "0–0");
+
   return (
     <div className="card topbar">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-extrabold">Organigramma</h2>
-          <div className="mt-2 flex flex-wrap gap-6 text-sm">
-            <span className="badge">Membri: <b>{total}</b></span>
-            <span className="badge">In sorgente: <b>{unassigned}</b></span>
-            <span className="badge">Capi: <b>{capi}</b></span>
-            <span className={`badge ${missingCapo ? "badge--warn" : ""}`}>Capi mancanti: <b>{missingCapo}</b></span>
-            <span className="badge">Mediana membri/capo: <b>{medSize}</b></span>
-            <span className="badge">Min–Max: <b>{minSize}–{maxSize}</b></span>
-            <span className={`badge ${dupCount ? "badge--danger" : ""}`}>Duplicati: <b>{dupCount}</b></span>
-            <span className="badge badge--muted">Stato: <b>Bozza</b></span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <label className="btn">
-            📥 Importa nomi
+      <div className="toolbar">
+        <h2 className="title">Organigramma</h2>
+        <div className="actions">
+          <label className="btn primary">
+            📥 Importa file
             <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportChange} disabled={busy}/>
           </label>
-          <button className="btn" onClick={onUndo} disabled={!historyCanUndo()}>↶ Annulla</button>
-          <button className="btn" onClick={onRedo} disabled={!historyCanRedo()}>↷ Ripeti</button>
-          <button className="btn" onClick={onExportCSV}>📤 Esporta CSV</button>
-          <button className="btn" onClick={onExportJSON}>💾 Esporta JSON</button>
-          {busy ? <span className="text-sm opacity-70">Import in corso…</span> : null}
+          <div className="divider" />
+          <button className="btn ghost" onClick={onUndo} disabled={!historyCanUndo()}>↶ Annulla</button>
+          <button className="btn ghost" onClick={onRedo} disabled={!historyCanRedo()}>↷ Ripeti</button>
+          <div className="divider" />
+          <button className="btn ghost" onClick={onExportCSV}>📤 Esporta CSV</button>
+          <button className="btn ghost" onClick={onExportJSON}>💾 Esporta JSON</button>
         </div>
       </div>
+
+      {kpis.length ? (
+        <div className="kpi-bar">
+          {kpis.map((k, i) => (
+            <div key={i} className={`kpi ${k.tone || ""}`}>
+              <span className="kpi__label">{k.label}</span>
+              <span className="kpi__value">{k.val}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
