@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useSession } from "@/shared/session.js";
+import { useSession } from "@/shared/session.jsx";
 import { supabase } from "@/lib/supabase.js";
 
 function UserBadge() {
