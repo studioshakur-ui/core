@@ -1,6 +1,18 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useSession } from "@/shared/session.js";
+import { supabase } from "@/lib/supabase.js";
 
+function UserBadge() {
+  const { user, role } = useSession();
+  if (!user) return <a className="btn" href="/login">Login</a>;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-secondary">{user.email} · {role || "—"}</span>
+      <button className="btn ghost" onClick={()=>supabase.auth.signOut()}>Logout</button>
+    </div>
+  );
+}
 /**
  * Navbar CORE
  * - Liens: Dashboard, Capo, Manager, Catalogo, Login
