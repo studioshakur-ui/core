@@ -1,74 +1,102 @@
+// src/manager/ManagerHeader.jsx
 import React from "react";
-import { historyCanUndo, historyCanRedo } from "@/shared/history.js";
+import { loadOrg, saveOrg, addMember, addTeam, moveMember } from "@/shared/orgStore.js";
+import { historyCapture } from "@/shared/history.js";
+import { importRoster } from "@/shared/importExcel.js";
 
-function median(arr){ const a=[...arr].sort((x,y)=>x-y); if(!a.length) return 0; const m=Math.floor(a.length/2); return a.length%2?a[m]:Math.round((a[m-1]+a[m])/2); }
+export default function ManagerHeader() {
+  const [org, setOrg] = React.useState(() => loadOrg() || { members: [], teams: [], unassigned: [], suspects: [] });
+  React.useEffect(() => { const i = setInterval(() => setOrg(loadOrg() || {}), 500); return () => clearInterval(i); }, []);
 
-export default function ManagerHeader({
-  org,
-  busy,
-  onImportChange,
-  onUndo,
-  onRedo,
-  onExportCSV,
-  onExportJSON,
-}) {
-  const o = org && typeof org === "object"
-    ? org
-    : { members: [], teams: [], unassigned: [], suspects: [] };
+  const members = org.members || [];
+  const teams = org.teams || [];
+  const unassigned = org.unassigned || [];
 
-  const total = o.members?.length || 0;
-  const inSource = o.unassigned?.length || 0;
-  const teams = o.teams || [];
-  const sizes = teams.map(t => (t.members || []).filter(id => id !== t.capo).length);
-  const minSize = sizes.length ? Math.min(...sizes) : 0;
-  const maxSize = sizes.length ? Math.max(...sizes) : 0;
-  const medSize = median(sizes);
-  const missingCapo = teams.filter(t => !t.capo).length;
+  const counters = {
+    members: members.length,
+    capiMissing: teams.filter(t => !t.capo).length,
+  };
 
-  const dupMap = new Map();
-  (o.members || []).forEach(m => {
-    const k = (m.name || "").trim().toLowerCase();
-    dupMap.set(k, (dupMap.get(k) || 0) + 1);
-  });
-  const dupCount = Array.from(dupMap.values()).filter(n => n > 1).length;
+  async function onImportFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const { capi, operai } = await importRoster(file);
 
-  const kpis = [
-    { label: "Membri", val: total },
-    { label: "In sorgente", val: inSource },
-    { label: "Capi mancanti", val: missingCapo, tone: missingCapo ? "warn" : "" },
-    { label: "Mediana membri/capo", val: medSize },
-    { label: "Min–Max", val: sizes.length ? `${minSize}–${maxSize}` : 0 },
-    { label: "Duplicati", val: dupCount, tone: dupCount ? "danger" : "" },
-  ].filter(k => k.val && k.val !== 0 && k.val !== "0–0");
+    historyCapture();
+
+    // Index existants (pour éviter doublons)
+    const byName = new Map(members.map(m => [m.name.toLowerCase(), m.id]));
+
+    // 1) Créer/assurer les capi → 1 team par capo (capo comme membre + capo= lui)
+    for (const name of capi) {
+      const key = name.toLowerCase();
+      let id = byName.get(key);
+      if (!id) {
+        const m = addMember({ name });
+        byName.set(key, m.id);
+        id = m.id;
+      }
+      // Team déjà existante avec ce capo ?
+      let team = teams.find(t => t.capo === id);
+      if (!team) {
+        const t = addTeam("capo");
+        moveMember(id, t.id);
+        const fresh = loadOrg();
+        const idx = fresh.teams.findIndex(tt => tt.id === t.id);
+        fresh.teams[idx].capo = id;
+        saveOrg(fresh);
+      }
+    }
+
+    // 2) Ajouter les operai → en Sorgente (non assignés)
+    for (const name of operai) {
+      const key = name.toLowerCase();
+      if (!byName.has(key)) {
+        const m = addMember({ name });
+        byName.set(key, m.id);
+        // addMember met déjà en unassigned via orgStore
+      }
+    }
+
+    setOrg(loadOrg() || {});
+    // Reset input pour pouvoir ré-importer le même fichier si besoin
+    e.target.value = "";
+  }
 
   return (
-    <div className="card topbar">
-      <div className="toolbar">
-        <h2 className="title">Organigramma</h2>
-        <div className="actions">
-          <label className="btn primary">
-            📥 Importa file
-            <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={onImportChange} disabled={busy}/>
-          </label>
-          <div className="divider" />
-          <button className="btn ghost" onClick={onUndo} disabled={!historyCanUndo()}>↶ Annulla</button>
-          <button className="btn ghost" onClick={onRedo} disabled={!historyCanRedo()}>↷ Ripeti</button>
-          <div className="divider" />
-          <button className="btn ghost" onClick={onExportCSV}>📤 Esporta CSV</button>
-          <button className="btn ghost" onClick={onExportJSON}>💾 Esporta JSON</button>
+    <div className="card">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="mr-4">
+          <div className="title">Organigramma</div>
+          <div className="text-xs text-secondary mt-1">
+            <span className="subchip">Membri <b>{counters.members}</b></span>
+            <span className="subchip">Capi mancanti <b>{counters.capiMissing}</b></span>
+          </div>
         </div>
-      </div>
 
-      {kpis.length ? (
-        <div className="kpi-bar">
-          {kpis.map((k, i) => (
-            <div key={i} className={`kpi ${k.tone || ""}`}>
-              <span className="kpi__label">{k.label}</span>
-              <span className="kpi__value">{k.val}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
+        <label className="btn">
+          📥 Importa file
+          <input type="file" accept=".xlsx,.xlsm,.xlsb,.csv" hidden onChange={onImportFile} />
+        </label>
+
+        <button className="btn ghost" onClick={()=>{
+          if (!confirm("Annullare tutte le modifiche recenti? (solo sessione)")) return;
+          // simple rollback d’affichage (les vrai undo sont dans historyCapture)
+          setOrg(loadOrg() || {});
+        }}>↩ Annulla</button>
+
+        <button className="btn ghost" onClick={()=>{
+          // répéter dernière action : hors scope ici
+          alert("Funzione 'Ripeti' non ancora disponibile in questa vista.");
+        }}>⟳ Ripeti</button>
+
+        <button className="btn" onClick={()=>{
+          const o = loadOrg() || {};
+          const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(o, null, 2));
+          const a = document.createElement("a");
+          a.href = data; a.download = "organigramma.json"; a.click();
+        }}>📦 Esporta JSON</button>
+      </div>
     </div>
   );
 }
