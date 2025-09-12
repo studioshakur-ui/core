@@ -10,7 +10,7 @@ function write(s) { sessionStorage.setItem(K, JSON.stringify(s)); }
 export function historyCapture() {
   const s = read();
   const snap = loadOrg();
-  s.undo.push(snap); // limite optionnelle
+  s.undo.push(snap);
   if (s.undo.length > 50) s.undo.shift();
   s.redo = [];
   write(s);
