@@ -1,29 +1,20 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
-  optimizeDeps: {
-    // Évite que Vite prétraite ExcelJS (on prend la build déjà minifiée)
-    exclude: ["exceljs"]
-  },
-  build: {
-    commonjsOptions: {
-      include: [/node_modules/],
-      transformMixedEsModules: true
-    },
-    rollupOptions: {
-      output: {
-        // On isole exceljs dans un chunk séparé (optionnel mais plus propre)
-        manualChunks: {
-          exceljs: ["exceljs/dist/exceljs.min.js"]
-        }
-      }
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url))
     }
   },
-  define: {
-    // Neutralise process et global (ExcelJS peut les référencer)
-    "process.env": {},
-    global: "window"
-  }
+  optimizeDeps: { exclude: ["exceljs"] },
+  build: {
+    commonjsOptions: { include: [/node_modules/], transformMixedEsModules: true },
+    rollupOptions: {
+      output: { manualChunks: { exceljs: ["exceljs/dist/exceljs.min.js"] } }
+    }
+  },
+  define: { "process.env": {}, global: "window" }
 });
